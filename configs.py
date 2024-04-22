@@ -1,69 +1,29 @@
-import io 
-import re 
-import pandas as pd
+import io
+import re
 import json
-from datetime import datetime
 
-def read_txt(path):
-  file = io.open(path, mode='r', encoding='utf-8')
-  result = file.read()
-  return result
-
-def read_json(path):
-  with open(path, mode='r' , encoding='utf-8') as json_file:
-    result = json.load(json_file)
-  return result
+def read_file(path, file_type='txt'):
+  with io.open(path, mode='r', encoding='utf-8') as file:
+    if file_type == 'json':
+      return json.load(file)
+    else:
+      return file.read()
 
 def shingle(ls, num):
-  result = []
-  for i in range(len(ls) - num + 1):
-    result.append(' '.join(ls[i:i + num]))
-  return result
+  return [' '.join(ls[i:i + num]) for i in range(len(ls) - num + 1)]
 
 def stopwords_sorting(stopwords):
-  stw_df = pd.DataFrame(stopwords, columns=['stw'])
-  stw_df['len'] = stw_df['stw'].str.len()
-  stw_df = stw_df.sort_values(by=['len'], ascending=False)
-  stw_ls = stw_df['stw'].tolist()
-  return stw_ls
-
-# def text_format(text, stopwords):
-#   processed_text = re.sub(r'\s+', ' ', text)
-#   processed_text = re.sub(r'\Whttp[s]?:\S+|\Ahttp[s]?:\S+', '|', processed_text)
-#   processed_text = re.sub(r'_x\d+d_', '|', processed_text)
-#   processed_text = re.sub(r'\d+', '|', processed_text)
-#   processed_text = re.sub(r'_', '|', processed_text)
-#   processed_text = re.sub(r'[^\w\s]', '|', processed_text)
-
-#   for stw in stopwords:
-#     processed_text = re.sub(f'\W{stw}\W|\A{stw}\W|\W{stw}\Z|\A{stw}\Z', ' | ', processed_text)
-
-#   processed_text = re.sub(r'\|+', '|', re.sub(r'[\s]?\|[\s]?', '|', processed_text))
-
-#   return processed_text
+  return sorted(stopwords, key=len, reverse=True)
 
 def text_format(text, stopwords):
-  ls = [x for x in re.split(r' |_', text) if x != '']
-
-  final = []
-
-  for i in range(len(ls)):
-    final.append('|' if (re.match(r'http[s]?:\S+', ls[i]) or re.findall(r'\d', ls[i]) or re.match(r'\W+', ls[i])) else ls[i])
-
-  processed_text = ' '.join(final)
+  words = re.split(r'[\s_]+', text)
+  processed_text = ' '.join('|' if (re.match(r'http[s]?:\S+', word) or re.findall(r'\d', word) or re.match(r'\W+', word)) else word for word in words)
   for stw in stopwords:
-    processed_text = re.sub(f'\W{stw}\W|\A{stw}\W|\W{stw}\Z|\A{stw}\Z', ' | ', processed_text)
-
-  processed_text = re.sub(r'\|+', '|', re.sub(r'[\s]?\|[\s]?', '|', processed_text))
-
-  return processed_text
+      processed_text = re.sub(rf'\b{stw}\b', '|', processed_text)
+  return re.sub(r'\|+', '|', processed_text).strip('|')
 
 def doc_format(doc, stopwords):
-  result = []
-  for conv in doc:
-    conv_format = text_format(conv, stopwords).strip('|').split('|')
-    result.append(conv_format)
-  return result
+  return [text_format(conv, stopwords).split('|') for conv in doc]
 
 def bundle_listing(conv_ls):
   bundle_ls = []
@@ -74,71 +34,32 @@ def bundle_listing(conv_ls):
         i += 1
         bundle_ls.extend(shingle(word_ls, i))
   return bundle_ls
+  # return [shingle(sen.split(), i) for conv in conv_ls for sen in conv for i in range(1, 5)]
 
 def bundle_counting(bundle_ls):
   bundle_count = {}
   for bundle in bundle_ls:
-    if bundle not in bundle_count.keys():
-      bundle_count[bundle] = 0
-    bundle_count[bundle] += 1
+    bundle_count[bundle] = bundle_count.get(bundle, 0) + 1
   return bundle_count
 
-def first_bundle(bundle_count, bundle_level):
-  first_bundle = {}
-  for bundle in bundle_count.keys():
-    key = ' '.join(bundle.split()[:bundle_level])
-    if key not in first_bundle.keys():
-      first_bundle[key] = {}
-      first_bundle[key]['total'] = 0
-      first_bundle[key]['main'] = 0
-      first_bundle[key]['children'] = {}
-    
-    first_bundle[key]['total'] += bundle_count[bundle]
+def bundle_structure(bundle_count, bundle_level, position='first'):
+  bundles = {}
+  for bundle, count in bundle_count.items():
+    key = ' '.join(bundle.split()[:bundle_level] if position == 'first' else bundle.split()[-bundle_level:])
+    if key not in bundles:
+      bundles[key] = {'total': 0, 'main': 0, 'children': {}}
+    bundles[key]['total'] += count
     if key == bundle:
-      first_bundle[key]['main'] += bundle_count[bundle]
+      bundles[key]['main'] += count
     else:
-      first_bundle[key]['children'][bundle] = bundle_count[bundle]
-
-  return first_bundle
-
-def last_bundle(bundle_count, bundle_level):
-  last_bundle = {}
-  for bundle in bundle_count.keys():
-    key = ' '.join(bundle.split()[-bundle_level:])
-    if key not in last_bundle.keys():
-      last_bundle[key] = {}
-      last_bundle[key]['total'] = 0
-      last_bundle[key]['main'] = 0
-      last_bundle[key]['children'] = {}
-    
-    last_bundle[key]['total'] += bundle_count[bundle]
-    if key == bundle:
-      last_bundle[key]['main'] += bundle_count[bundle]
-    else:
-      last_bundle[key]['children'][bundle] = bundle_count[bundle]
-
-  return last_bundle
-
-def first_bundle_all_level(bundles):
-  for w1 in bundles.keys():
-    w1_children = first_bundle(bundles[w1]['children'], 2)
-
-    for w2 in w1_children.keys():
-      w2_children = first_bundle(w1_children[w2]['children'], 3)
-      w1_children[w2]['children'] = w2_children
-
-    bundles[w1]['children'] = w1_children
+      bundles[key]['children'][bundle] = count
   return bundles
 
-def last_bundle_all_level(bundles):
-  for w1 in bundles.keys():
-    w1_children = last_bundle(bundles[w1]['children'], 2)
-
-    for w2 in w1_children.keys():
-      w2_children = last_bundle(w1_children[w2]['children'], 3)
-      w1_children[w2]['children'] = w2_children
-
-    bundles[w1]['children'] = w1_children
+def recursive_bundle_structure(bundles, level=2, position='first'):
+  for key, value in bundles.items():
+    if value['children']:
+      value['children'] = bundle_structure(value['children'], level, position)
+      recursive_bundle_structure(value['children'], level + 1, position)
   return bundles
 
 def bundle_score(bundles, threshold):
@@ -165,8 +86,8 @@ def bundle_score(bundles, threshold):
         
         f4_neg = 0
         for w4 in w3_children.keys():
-          w4_total = w3_children[w4]
-          w4_main = w3_children[w4]
+          w4_total = w3_children[w4]['total']
+          w4_main = w3_children[w4]['main']
           f4 = w4_total / w1_total
 
           if f4 > threshold:
@@ -277,8 +198,8 @@ def fl_tokenizer(doc, stopwords_ls, threshold):
 
   bundle_count = bundle_counting(bundle_ls)
 
-  first_bundles = first_bundle_all_level(first_bundle(bundle_count, 1))
-  last_bundles = last_bundle_all_level(last_bundle(bundle_count, 1))
+  first_bundles = recursive_bundle_structure(bundle_structure(bundle_count, 1, 'first'), position='first')
+  last_bundles = recursive_bundle_structure(bundle_structure(bundle_count, 1, 'last'), position='last')
 
   first_bundle_sc = bundle_score(first_bundles, threshold)
   last_bundle_sc = bundle_score(last_bundles, threshold)
