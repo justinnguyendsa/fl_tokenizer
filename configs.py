@@ -145,7 +145,7 @@ def tokenizer(conv_ls, token_ls):
 
   return final
 
-def fl_tokenizer(doc, stopwords_ls, threshold):
+def fl_tokenizer(doc, stopwords_ls, threshold=0.01):
   stopwords = stopwords_sorting(stopwords_ls)
   formatted_conv_ls = doc_format(doc, stopwords) 
 
