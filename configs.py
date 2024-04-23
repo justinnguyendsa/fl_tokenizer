@@ -16,8 +16,9 @@ def stopwords_sorting(stopwords):
   return sorted(stopwords, key=len, reverse=True)
 
 def text_format(text, stopwords):
-  words = re.split(r'[\s_]+', text)
+  words = re.split(r'[\s_]+', text.lower())
   processed_text = ' '.join('|' if (re.match(r'http[s]?:\S+', word) or re.findall(r'\d', word) or re.match(r'\W+', word)) else word for word in words)
+  processed_text = re.sub(r'[^\w\s]', '|', processed_text)
   for stw in stopwords:
       processed_text = re.sub(rf'\b{stw}\b', '|', processed_text)
   return re.sub(r'\|+', '|', processed_text).strip('|')
